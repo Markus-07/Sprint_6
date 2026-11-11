@@ -1,0 +1,1 @@
+{"uuid": "168eefec-f5ba-421b-88fe-53db76fdb042", "befores": [{"name": "expected_fragment", "status": "passed", "start": 1794374656763, "stop": 1794374656763}], "afters": [{"name": "expected_fragment::<lambda>", "start": 1794374658928}], "start": 1794374656763, "stop": 1794374658928}
