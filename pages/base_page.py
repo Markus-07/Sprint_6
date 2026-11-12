@@ -40,6 +40,10 @@ class BasePage:
                 return
             except StaleElementReferenceException:
                 continue
+    def click_via_js(self, element):
+        """Кликает по элементу через JavaScript."""
+        self.driver.execute_script('arguments[0].click();', element)
+
     def find_all(self, locator):
         """Возвращает все найденные элементы по локатору."""
         return self.driver.find_elements(*locator)

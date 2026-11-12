@@ -44,3 +44,30 @@ ORDER_SCENARIOS = [
 ]
 REAL_ORDER_NUMBER = 779128
 FAKE_ORDER_NUMBER = 494053
+
+BASE_URL = 'https://qa-scooter.praktikum-services.ru/'
+
+ORDER_SCENARIOS = [
+    ('top', {
+        'name': 'Иван',
+        'surname': 'Петров',
+        'address': 'ул. Тверская, 1',
+        'metro': 'Сокол',
+        'phone': '+79991112233',
+        'period': 'сутки',
+        'colors': ['black'],
+        'comment': 'Позвоните за полчаса',
+        'date': None,  # None — возьмём завтрашний день
+    }),
+    ('bottom', {
+        'name': 'Мария',
+        'surname': 'Иванова',
+        'address': 'ул. Арбат, 5',
+        'metro': 'Комсомольская',
+        'phone': '+79112223344',
+        'period': 'двое суток',
+        'colors': ['grey'],
+        'comment': '',
+        'date': None,
+    }),
+]

@@ -7,8 +7,10 @@ from pages.base_page import BasePage
 
 class FaqPage(BasePage):
 
+    @allure.step("Формируем локатор вопроса №{index}")
     def question(self, index):
         return (By.ID, f"accordion__heading-{index}")
+
 
     @allure.step("Прокручиваем к вопросу №{index} и кликаем по нему")
     def click_question(self, index):
@@ -18,7 +20,7 @@ class FaqPage(BasePage):
             q.click()
         except ElementClickInterceptedException:
             # картинка самоката перекрывает кнопку — кликаем через JS
-            self.driver.execute_script('arguments[0].click();', q)
+            self.click_via_js(q)
 
     @allure.step("Читаем текст ответа на вопрос №{index}")
     def get_answer_text(self, index):
