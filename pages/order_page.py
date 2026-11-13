@@ -1,11 +1,10 @@
 import time
 from datetime import date, timedelta
 
-from selenium.common.exceptions import TimeoutException
+import allure
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
 
 from pages.base_page import BasePage
 from data import BASE_URL
@@ -32,9 +31,13 @@ class OrderPage(BasePage):
 
     # ---------- Попап подтверждения ----------
     ORDER_MODAL  = (By.XPATH, "//div[contains(@class,'Order_Modal')]")
-    BTN_YES      = (By.XPATH, "//div[contains(@class,'Order_Modal')]//button[text()='Да']")
+    BTN_YES      = (By.XPATH, "//button[normalize-space()='Да']")
     BTN_NO       = (By.XPATH, "//div[contains(@class,'Order_Modal')]//button[text()='Нет']")
     MODAL_HEADER = (By.XPATH, "//div[contains(@class,'Order_ModalHeader')]")
+    TEXT_SUCCESS = (By.XPATH, "//*[contains(., 'Заказ оформлен')]")
+
+    # ---------- Статус заказа ----------
+    BTN_STATUS = (By.XPATH, "//div[contains(@class,'Order_NextButton')]//button[text()='Посмотреть статус']")
 
     # кнопка опции в списке станций: ul.select-search__options > li > button.select-search__option
     METRO_OPTION = (
@@ -45,6 +48,7 @@ class OrderPage(BasePage):
     def __init__(self, driver):
         super().__init__(driver, BASE_URL)
 
+    @allure.step("Заполняем первую форму: имя, фамилия, адрес, метро, телефон")
     def fill_first_form(self, name, surname, address, phone, metro):
         self.type_text(self.INPUT_NAME, name)
         self.type_text(self.INPUT_SURNAME, surname)
@@ -52,21 +56,20 @@ class OrderPage(BasePage):
         self._type_metro(metro)
         self.type_text(self.INPUT_PHONE, phone)
 
+    @allure.step("Выбираем станцию метро «{metro}»")
     def _type_metro(self, metro):
-        option_xp = self.METRO_OPTION.format(station=metro)
-        any_option_xp = "//button[contains(@class,'select-search__option')]"
-
-        def visible(d, xp):
-            return [e for e in d.find_elements(By.XPATH, xp) if e.is_displayed()]
+        any_option = "//button[contains(@class,'select-search__option')]"
 
         for attempt in range(4):
-            field = self.driver.find_element(*self.INPUT_METRO)
-            field.click()
+            field = self.find(self.INPUT_METRO)
+            self.click_element(field)
             field.send_keys(Keys.CONTROL, 'a')
             field.send_keys(Keys.DELETE)
             field.send_keys(metro)
             try:
-                WebDriverWait(self.driver, 5).until(lambda d: visible(d, any_option_xp))
+                self.wait_condition(
+                    lambda d: self.find_all_visible((By.XPATH, any_option)), timeout=5
+                )
             except TimeoutException:
                 continue  # список не открылся — пробуем заново
 
@@ -75,52 +78,45 @@ class OrderPage(BasePage):
             field.send_keys(Keys.ENTER)
 
             try:
-                WebDriverWait(self.driver, 5).until(
-                    lambda d: field.get_attribute('value') == metro
-                )
+                self.wait_condition(lambda d: field.get_attribute('value') == metro, timeout=5)
                 return  # выбор засчитан и в поле, и в форме
             except TimeoutException:
                 continue  # Enter не сработал — пробуем заново
 
+        visible = [o.text for o in self.find_all_visible((By.XPATH, any_option))]
         raise AssertionError(
             f"Не удалось выбрать станцию '{metro}' за 4 попытки. "
-            f"Последние видимые опции: "
-            f"{[o.text for o in visible(self.driver, any_option_xp)]}"
+            f"Последние видимые опции: {visible}"
         )
 
-
+    @allure.step("Кликаем «Далее» и ждём вторую форму")
     def click_next(self):
         for attempt in range(3):
-            btn = self.driver.find_element(*self.BTN_NEXT)
+            btn = self.find(self.BTN_NEXT)
             self.scroll_to(btn)
             try:
-                btn.click()
+                self.click_element(btn)
             except ElementClickInterceptedException:
-                self.driver.execute_script('arguments[0].click();', btn)
+                self.click_via_js(btn)
             try:
                 self.wait_visible(self.INPUT_DATE, timeout=15)
                 return  # вторая форма открылась
             except TimeoutException:
-                # на последней попытке вылетаем с понятной ошибкой
-                if attempt == 2:
-                    raise
-        allure.attach(
-            self.driver.get_screenshot_as_png(),
-            name='form_state_on_failure',
-            attachment_type=allure.attachment_type.PNG,
-        )
-        metro_val = self.driver.find_element(*self.INPUT_METRO).get_attribute('value')
+                continue
+
+        self.attach_screenshot('form_state_on_failure')
+        metro_val = self.get_attribute(self.INPUT_METRO, 'value')
         raise AssertionError(
             f'Вторая форма не открылась. Поле метро содержит: {metro_val!r}'
         )
 
-
+    @allure.step("Заполняем вторую форму: дата, срок аренды «{period}», цвета, комментарий")
     def fill_second_form(self, period='сутки', colors=None, comment='', date=None):
         if colors is None:
             colors = ['black']
         self.type_text(self.INPUT_DATE, date or self._tomorrow())
         # сбрасываем фокус с поля даты, чтобы календарь не перекрывал дропдаун
-        self.driver.find_element(*self.INPUT_DATE).send_keys(Keys.ENTER)
+        self.find(self.INPUT_DATE).send_keys(Keys.ENTER)
         self.click(self.RENTAL_DROPDOWN)
         self.click((By.XPATH, self.RENTAL_OPTION.format(period=period)))
         for color in colors:
@@ -128,130 +124,52 @@ class OrderPage(BasePage):
         if comment:
             self.type_text(self.COMMENT, comment)
 
+    @allure.step("Кликаем «Заказать»")
     def click_submit(self):
         self.click(self.BTN_SUBMIT)
 
+    @allure.step("Подтверждаем заказ кнопкой «Да»")
     def confirm_order(self):
         self.wait_visible(self.MODAL_HEADER)
-        time.sleep(0.5)
+        time.sleep(0.5)  # ждём, пока модалка дорисуется
 
-        def all_yes(d):
-            return [b for b in d.find_elements(By.XPATH, "//button[normalize-space()='Да']")
-                    if b.is_displayed()]
-
-        def success(d):
-            return d.find_elements(By.XPATH, "//*[contains(., 'Заказ оформлен')]")
-
-        btns = all_yes(self.driver)
-        assert btns, 'Видимой кнопки «Да» в модалке нет'
-        b = btns[0]
-
-        # 1. Есть ли у кнопки onClick в React-пропсах
-        react_info = self.driver.execute_script(
-            "const el = arguments[0]; const out = [];"
-            "for (const k of Object.keys(el)) {"
-            "  if (k.startsWith('__reactProps')) {"
-            "    out.push(Object.keys(el[k]).join(','));"
-            "  }"
-            "}"
-            "return out.join(' | ') || 'react props не найдены';",
-            b,
-        )
-
-        # 2. Клик как человек
-        try:
-            ActionChains(self.driver).move_to_element(b).click().perform()
+        for attempt in range(3):
+            buttons = self.find_all_visible(self.BTN_YES)
+            assert buttons, 'Видимой кнопки «Да» в модалке нет'
+            btn = buttons[0]
             try:
-                WebDriverWait(self.driver, 3).until(success)
+                self.click_element(btn)
+            except ElementClickInterceptedException:
+                self.click_via_js(btn)
+            try:
+                self.wait_condition(
+                    lambda d: self.find_all_visible(self.TEXT_SUCCESS), timeout=3
+                )
                 return True
             except TimeoutException:
-                pass
-        except Exception:
-            pass
+                continue
 
-        # 3. Доверенный клик через CDP — на координаты кнопки
-        try:
-            r = b.rect
-            x = int(r['x'] + r['width'] / 2)
-            y = int(r['y'] + r['height'] / 2)
-            self.driver.execute_cdp_cmd('Input.dispatchMouseEvent',
-                {'type': 'mouseMoved', 'x': x, 'y': y})
-            self.driver.execute_cdp_cmd('Input.dispatchMouseEvent',
-                {'type': 'mousePressed', 'x': x, 'y': y, 'button': 'left', 'clickCount': 1})
-            self.driver.execute_cdp_cmd('Input.dispatchMouseEvent',
-                {'type': 'mouseReleased', 'x': x, 'y': y, 'button': 'left', 'clickCount': 1})
-            try:
-                WebDriverWait(self.driver, 3).until(success)
-                return True
-            except TimeoutException:
-                pass
-        except Exception as e:
-            react_info += f'; CDP недоступен: {type(e).__name__}'
+        self.attach_screenshot('confirm_failure')
+        raise AssertionError('Кнопка «Да» не сработала: окно «Заказ оформлен» не появилось')
 
-        # 4. Окно для ручного клика: нажми «Да» мышкой в браузере
-        print('\n>>> У тебя 20 секунд: нажми «Да» руками в браузере Selenium!')
-        time.sleep(20)
-        try:
-            WebDriverWait(self.driver, 2).until(success)
-            print('>>> Ручной клик сработал — заказ оформлен!')
-            return True
-        except TimeoutException:
-            pass
-
-        api = self.get_order_api_status()
-        try:
-            modal_text = self.driver.find_element(
-                By.XPATH, "//div[contains(@class,'Order_Modal')]"
-            ).text
-        except Exception:
-            modal_text = 'модалка не найдена'
-        raise AssertionError(
-            f'Кнопка «Да» не сработает никак. React-пропсы кнопки: {react_info}. '
-            f'Модалка: {modal_text!r}. Ответы API: {api}'
-        )
-
-
-    def get_order_api_status(self):
-        """Собирает из performance-лога запросы и ответы к /orders."""
-        import json
-        events = []
-        try:
-            for entry in self.driver.get_log('performance'):
-                try:
-                    msg = json.loads(entry['message'])['message']
-                except Exception:
-                    continue
-                if msg.get('method') == 'Network.requestWillBeSent':
-                    req = msg['params']['request']
-                    if 'orders' in req['url']:
-                        events.append(f"{req['method']} {req['url']}")
-                elif msg.get('method') == 'Network.responseReceived':
-                    resp = msg['params']['response']
-                    if 'orders' in resp['url']:
-                        events.append(f"ответ {resp['status']} {resp['url']}")
-        except Exception as e:
-            return [f'логи недоступны: {type(e).__name__}: {e}']
-        return events or ['ни одного запроса к /orders — обработчик не сработал']
-
-
+    @allure.step("Ждём окно «Заказ оформлен»")
     def assert_order_created(self):
         try:
-            WebDriverWait(self.driver, 10).until(
-                lambda d: d.find_elements(By.XPATH, "//*[contains(., 'Заказ оформлен')]")
+            self.wait_condition(
+                lambda d: self.find_all_visible(self.TEXT_SUCCESS), timeout=10
             )
             return True
         except TimeoutException:
-            headers = [h.text for h in self.driver.find_elements(
-                By.XPATH, "//div[contains(@class,'Order_ModalHeader')]"
-            )]
-            yes = self.driver.find_elements(By.XPATH, "//button[normalize-space()='Да']")
+            headers = [h.text for h in self.find_all(self.MODAL_HEADER)]
+            yes = self.find_all(self.BTN_YES)
             raise AssertionError(
                 f'Заголовков модалки на странице: {headers}. '
                 f'Кнопок «Да»: {len(yes)}, видимых: {sum(b.is_displayed() for b in yes)}'
             )
 
+    @allure.step("Открываем страницу статуса заказа")
     def view_status(self):
-        self.click((By.XPATH, "//div[contains(@class,'Order_NextButton')]//button[text()='Посмотреть статус']"))
+        self.click(self.BTN_STATUS)
 
     @staticmethod
     def _tomorrow():

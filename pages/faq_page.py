@@ -24,4 +24,5 @@ class FaqPage(BasePage):
 
     @allure.step("Читаем текст ответа на вопрос №{index}")
     def get_answer_text(self, index):
-        return self.find_visible((By.ID, f"accordion__panel-{index}")).text
+        return self.wait_visible((By.ID, f"accordion__panel-{index}")).text
+
