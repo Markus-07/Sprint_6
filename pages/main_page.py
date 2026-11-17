@@ -3,6 +3,7 @@ from selenium.webdriver.common.by import By
 
 from pages.base_page import BasePage
 from data import BASE_URL
+from selenium.common.exceptions import TimeoutException
 
 
 class MainPage(BasePage):
@@ -46,6 +47,18 @@ class MainPage(BasePage):
     def click_scooter_logo(self):
         self.click(self.SCOOTER_LOGO)
 
-    @allure.step("Кликаем по логотипу Яндекса")
+    @allure.step("Кликаем по логотипу Яндекса и дожидаемся открытия Дзена")
     def click_yandex_logo(self):
-        self.click(self.YANDEX_LOGO)
+        old = self.window_handles()
+        for attempt in range(3):
+            self.click(self.YANDEX_LOGO)
+            try:
+                self.wait_new_window(old, timeout=5)
+                self.switch_to_window()
+                self.wait_url_contains('dzen.ru', timeout=10)
+                return
+            except TimeoutException:
+                continue  # окно не открылось или Дзен не загрузился — пробуем снова
+        raise AssertionError('Новое окно с Дзеном не открылось после клика по логотипу Яндекса')
+
+

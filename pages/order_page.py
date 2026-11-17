@@ -1,4 +1,3 @@
-import time
 from datetime import date, timedelta
 
 import allure
@@ -131,7 +130,8 @@ class OrderPage(BasePage):
     @allure.step("Подтверждаем заказ кнопкой «Да»")
     def confirm_order(self):
         self.wait_visible(self.MODAL_HEADER)
-        time.sleep(0.5)  # ждём, пока модалка дорисуется
+        # ждём, пока в модалке появится видимая кнопка «Да» — вместо искусственной задержки
+        self.wait_condition(lambda d: self.find_all_visible(self.BTN_YES), timeout=5)
 
         for attempt in range(3):
             buttons = self.find_all_visible(self.BTN_YES)

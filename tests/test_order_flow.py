@@ -1,13 +1,10 @@
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.by import By
-
 import allure
 import pytest
 
 from pages.main_page import MainPage
 from pages.order_page import OrderPage
 
-from data import BASE_URL, ORDER_SCENARIOS
+from data import ORDER_SCENARIOS
 
 @pytest.mark.parametrize('entry, user', ORDER_SCENARIOS)
 def test_full_order_flow(driver, entry, user):
